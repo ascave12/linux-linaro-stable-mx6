@@ -28,4 +28,13 @@ config MX6_VPU_352M
 	 adjust dynamic, and CPU lowest setpoint will be 352Mhz.
 	 This config is used for special VPU use case.
 
+config MX6_VPU_328M
+	bool "MX6 VPU 328M"
+	depends on MXC_VPU
+	default n
+	help
+	 Increase VPU frequncy to 328M, the config will disable bus frequency
+	 adjust dynamic, and CPU lowest setpoint will be 328Mhz.
+	 This config is used for special VPU use case.
+
 endmenu

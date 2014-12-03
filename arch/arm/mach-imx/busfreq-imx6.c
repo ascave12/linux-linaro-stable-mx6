@@ -925,11 +925,11 @@ static struct platform_driver busfreq_driver = {
 
 static int __init busfreq_init(void)
 {
-	if (platform_driver_register(&busfreq_driver) != 0)
-		return -ENODEV;
-
-	printk(KERN_INFO "Bus freq driver module loaded\n");
-
+	if (!IS_ENABLED(CONFIG_MX6_VPU_352M) && !IS_ENABLED(CONFIG_MX6_VPU_328M)) {
+		if (platform_driver_register(&busfreq_driver) != 0)
+			return -ENODEV;
+		printk(KERN_INFO "Bus freq driver module loaded\n");
+	}
 	return 0;
 }
 
