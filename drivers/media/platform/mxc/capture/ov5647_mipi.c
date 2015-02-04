@@ -53,7 +53,10 @@
 enum ov5647_mode {
 	ov5647_mode_MIN = 0,
 	ov5647_mode_960P_1280_960 = 0,
-	ov5647_mode_MAX = 0,
+	ov5647_mode_720P_1280_720 = 1,
+	ov5647_mode_1080P_1920_1080 = 2,
+	ov5647_mode_VGA_640_480 = 3,
+	ov5647_mode_MAX = 3,
 	ov5647_mode_INIT = 0xff, /*only for sensor init*/
 };
 
@@ -91,23 +94,25 @@ struct ov5647_mode_info {
  */
 static struct sensor_data ov5647_data;
 static int pwn_gpio = -EINVAL;
-static int pwn_active;
+static int powon_active;
 static int rst_gpio = -EINVAL;
 static int rst_active;
+static int led_gpio = -EINVAL;
+static int led_active;
 
 static struct reg_value ov5647_setting_30fps_960P_1280_960[] = {
 	{	0x0100	,	0x00	,	0	,	0	}	,
 	{	0x0103	,	0x01	,	0	,	0	}	,
-	{	0x3034	,	0x08	,	0	,	0	}	,  /* was 0x1A */
+	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x21	,	0	,	0	}	,
-	{	0x3036	,	0x37	,	0	,	0	}	,
+	{	0x3036	,	0x49	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x07	,	0	,	0	}	,
 	{	0x3820	,	0x41	,	0	,	0	}	,
 	{	0x3827	,	0xec	,	0	,	0	}	,
 	{	0x370c	,	0x03	,	0	,	0	}	,
-	{	0x3612	,	0x09	,	0	,	0	}	,
+	{	0x3612	,	0x4b	,	0	,	0	}	,
 	{	0x3618	,	0x00	,	0	,	0	}	,
 	{	0x5000	,	0x06	,	0	,	0	}	,
 	{	0x5001	,	0x00	,	0	,	0	}	,
@@ -177,7 +182,7 @@ static struct reg_value ov5647_setting_30fps_960P_1280_960[] = {
 	{	0x3a1b	,	0x58	,	0	,	0	}	,
 	{	0x3a1e	,	0x50	,	0	,	0	}	,
 	{	0x3a11	,	0x60	,	0	,	0	}	,
-	{	0x3a1f	,	0x28	,	0	,	0	}	,
+	{	0x3a1f	,	0x28	,	0	,	300	}	,
 	{	0x4001	,	0x02	,	0	,	0	}	,
 	{	0x4004	,	0x02	,	0	,	0	}	,
 	{	0x4000	,	0x09	,	0	,	0	}	,
@@ -189,28 +194,756 @@ static struct reg_value ov5647_setting_30fps_960P_1280_960[] = {
 	{	0x503d	,	0xc0	,	0	,	0	}	, /* test pattern */
 	{	0x503e	,	0x11	,	0	,	0	}	, /* test pattern */
 #endif
-	{	0x3503	,	0x03	,	0	,	0	}	, /* manual AE */
 	{	0x3501	,	0x10	,	0	,	0	}	,
 	{	0x3502	,	0x80	,	0	,	0	}	,
 	{	0x350a	,	0x00	,	0	,	0	}	,
 	{	0x350b	,	0x7f	,	0	,	0	}	,
-	{	0x5001	,	0x01	,	0	,	0	}	, /* manual AWB */
 	{	0x3c00	,	0x04	,	0	,	300	}	,
 	{	0x3002	,	0xe4	,	0x01,	0	}	, /* enable all outputs */
 };
 
+static struct reg_value ov5647_setting_15fps_960P_1280_960[] = {
+	{	0x0100	,	0x00	,	0	,	0	}	,
+	{	0x0103	,	0x01	,	0	,	0	}	,
+	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
+	{	0x3035	,	0x41	,	0	,	0	}	,
+	{	0x3036	,	0x49	,	0	,	0	}	,
+	{	0x303c	,	0x11	,	0	,	0	}	,
+	{	0x3106	,	0xf5	,	0	,	0	}	,
+	{	0x3821	,	0x07	,	0	,	0	}	,
+	{	0x3820	,	0x41	,	0	,	0	}	,
+	{	0x3827	,	0xec	,	0	,	0	}	,
+	{	0x370c	,	0x03	,	0	,	0	}	,
+	{	0x3612	,	0x4b	,	0	,	0	}	,
+	{	0x3618	,	0x00	,	0	,	0	}	,
+	{	0x5000	,	0x06	,	0	,	0	}	,
+	{	0x5001	,	0x00	,	0	,	0	}	,
+	{	0x5002	,	0x40	,	0	,	0	}	,
+	{	0x5003	,	0x08	,	0	,	0	}	,
+	{	0x5a00	,	0x08	,	0	,	0	}	,
+	{	0x3000	,	0x00	,	0	,	0	}	,
+	{	0x3001	,	0x00	,	0	,	0	}	,
+	{	0x3002	,	0x00	,	0	,	0	}	,
+	{	0x3016	,	0x08	,	0	,	0	}	,
+	{	0x3017	,	0xe0	,	0	,	0	}	,
+	{	0x3018	,	0x44	,	0	,	0	}	,
+	{	0x301c	,	0xf8	,	0	,	0	}	,
+	{	0x301d	,	0xf0	,	0	,	0	}	,
+	{	0x3a18	,	0x00	,	0	,	0	}	,
+	{	0x3a19	,	0xf8	,	0	,	0	}	,
+	{	0x3c01	,	0x80	,	0	,	0	}	,
+	{	0x3b07	,	0x0c	,	0	,	0	}	,
+	{	0x380c	,	0x07	,	0	,	0	}	,
+	{	0x380d	,	0x68	,	0	,	0	}	,
+	{	0x380e	,	0x03	,	0	,	0	}	,
+	{	0x380f	,	0xd8	,	0	,	0	}	,
+	{	0x3814	,	0x31	,	0	,	0	}	,
+	{	0x3815	,	0x31	,	0	,	0	}	,
+	{	0x3708	,	0x64	,	0	,	0	}	,
+	{	0x3709	,	0x52	,	0	,	0	}	,
+	{	0x3808	,	0x05	,	0	,	0	}	,
+	{	0x3809	,	0x00	,	0	,	0	}	,
+	{	0x380a	,	0x03	,	0	,	0	}	,
+	{	0x380b	,	0xc0	,	0	,	0	}	,
+	{	0x3800	,	0x00	,	0	,	0	}	,
+	{	0x3801	,	0x00	,	0	,	0	}	,
+	{	0x3802	,	0x00	,	0	,	0	}	,
+	{	0x3803	,	0x00	,	0	,	0	}	,
+	{	0x3804	,	0x0a	,	0	,	0	}	,
+	{	0x3805	,	0x3f	,	0	,	0	}	,
+	{	0x3806	,	0x07	,	0	,	0	}	,
+	{	0x3807	,	0xa1	,	0	,	0	}	,
+	{	0x3811	,	0x08	,	0	,	0	}	,
+	{	0x3813	,	0x02	,	0	,	0	}	,
+	{	0x3630	,	0x2e	,	0	,	0	}	,
+	{	0x3632	,	0xe2	,	0	,	0	}	,
+	{	0x3633	,	0x23	,	0	,	0	}	,
+	{	0x3634	,	0x44	,	0	,	0	}	,
+	{	0x3636	,	0x06	,	0	,	0	}	,
+	{	0x3620	,	0x64	,	0	,	0	}	,
+	{	0x3621	,	0xe0	,	0	,	0	}	,
+	{	0x3600	,	0x37	,	0	,	0	}	,
+	{	0x3704	,	0xa0	,	0	,	0	}	,
+	{	0x3703	,	0x5a	,	0	,	0	}	,
+	{	0x3715	,	0x78	,	0	,	0	}	,
+	{	0x3717	,	0x01	,	0	,	0	}	,
+	{	0x3731	,	0x02	,	0	,	0	}	,
+	{	0x370b	,	0x60	,	0	,	0	}	,
+	{	0x3705	,	0x1a	,	0	,	0	}	,
+	{	0x3f05	,	0x02	,	0	,	0	}	,
+	{	0x3f06	,	0x10	,	0	,	0	}	,
+	{	0x3f01	,	0x0a	,	0	,	0	}	,
+	{	0x3a08	,	0x01	,	0	,	0	}	,
+	{	0x3a09	,	0x27	,	0	,	0	}	,
+	{	0x3a0a	,	0x00	,	0	,	0	}	,
+	{	0x3a0b	,	0xf6	,	0	,	0	}	,
+	{	0x3a0d	,	0x04	,	0	,	0	}	,
+	{	0x3a0e	,	0x03	,	0	,	0	}	,
+	{	0x3a0f	,	0x58	,	0	,	0	}	,
+	{	0x3a10	,	0x50	,	0	,	0	}	,
+	{	0x3a1b	,	0x58	,	0	,	0	}	,
+	{	0x3a1e	,	0x50	,	0	,	0	}	,
+	{	0x3a11	,	0x60	,	0	,	0	}	,
+	{	0x3a1f	,	0x28	,	0	,	300	}	,
+	{	0x4001	,	0x02	,	0	,	0	}	,
+	{	0x4004	,	0x02	,	0	,	0	}	,
+	{	0x4000	,	0x09	,	0	,	0	}	,
+	{	0x4837	,	0x24	,	0	,	0	}	,
+	{	0x4050	,	0x6e	,	0	,	0	}	,
+	{	0x4051	,	0x8f	,	0	,	0	}	,
+	{	0x0100	,	0x01	,	0	,	0	}	,
+#if 0
+	{	0x503d	,	0xc0	,	0	,	0	}	, /* test pattern */
+	{	0x503e	,	0x11	,	0	,	0	}	, /* test pattern */
+#endif
+	{	0x3501	,	0x10	,	0	,	0	}	,
+	{	0x3502	,	0x80	,	0	,	0	}	,
+	{	0x350a	,	0x00	,	0	,	0	}	,
+	{	0x350b	,	0x7f	,	0	,	0	}	,
+	{	0x3c00	,	0x04	,	0	,	300	}	,
+	{	0x3002	,	0xe4	,	0x01,	0	}	, /* enable all outputs */
+};
 
+static struct reg_value ov5647_setting_30fps_720P_1280_720[] = {
+	{	0x0100	,	0x00	,	0	,	0	}	,
+	{	0x0103	,	0x01	,	0	,	0	}	,
+	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
+	{	0x3035	,	0x41	,	0	,	0	}	,
+	{	0x3036	,	0x7b	,	0	,	0	}	,
+	{	0x303c	,	0x11	,	0	,	0	}	,
+	{	0x3106	,	0xf5	,	0	,	0	}	,
+	{	0x3821	,	0x07	,	0	,	0	}	,
+	{	0x3820	,	0x41	,	0	,	0	}	,
+	{	0x3827	,	0xec	,	0	,	0	}	,
+	{	0x370c	,	0x03	,	0	,	0	}	,
+	{	0x3612	,	0x4b	,	0	,	0	}	,
+	{	0x3618	,	0x00	,	0	,	0	}	,
+	{	0x5000	,	0x06	,	0	,	0	}	,
+	{	0x5001	,	0x00	,	0	,	0	}	,
+	{	0x5002	,	0x40	,	0	,	0	}	,
+	{	0x5003	,	0x08	,	0	,	0	}	,
+	{	0x5a00	,	0x08	,	0	,	0	}	,
+	{	0x3000	,	0x00	,	0	,	0	}	,
+	{	0x3001	,	0x00	,	0	,	0	}	,
+	{	0x3002	,	0x00	,	0	,	0	}	,
+	{	0x3016	,	0x08	,	0	,	0	}	,
+	{	0x3017	,	0xe0	,	0	,	0	}	,
+	{	0x3018	,	0x44	,	0	,	0	}	,
+	{	0x301c	,	0xf8	,	0	,	0	}	,
+	{	0x301d	,	0xf0	,	0	,	0	}	,
+	{	0x3a18	,	0x00	,	0	,	0	}	,
+	{	0x3a19	,	0xf8	,	0	,	0	}	,
+	{	0x3c01	,	0x80	,	0	,	0	}	,
+	{	0x3b07	,	0x0c	,	0	,	0	}	,
+	{	0x380c	,	0x06	,	0	,	0	}	,
+	{	0x380d	,	0xd6	,	0	,	0	}	,
+	{	0x380e	,	0x03	,	0	,	0	}	,
+	{	0x380f	,	0xd8	,	0	,	0	}	,
+	{	0x3814	,	0x31	,	0	,	0	}	,
+	{	0x3815	,	0x31	,	0	,	0	}	,
+	{	0x3708	,	0x64	,	0	,	0	}	,
+	{	0x3709	,	0x52	,	0	,	0	}	,
+	{	0x3808	,	0x05	,	0	,	0	}	,
+	{	0x3809	,	0x00	,	0	,	0	}	,
+	{	0x380a	,	0x02	,	0	,	0	}	,
+	{	0x380b	,	0xd0	,	0	,	0	}	,
+	{	0x3800	,	0x00	,	0	,	0	}	,
+	{	0x3801	,	0x00	,	0	,	0	}	,
+	{	0x3802	,	0x00	,	0	,	0	}	,
+	{	0x3803	,	0x00	,	0	,	0	}	,
+	{	0x3804	,	0x0a	,	0	,	0	}	,
+	{	0x3805	,	0x3f	,	0	,	0	}	,
+	{	0x3806	,	0x06	,	0	,	0	}	,
+	{	0x3807	,	0xb2	,	0	,	0	}	,
+	{	0x3811	,	0x08	,	0	,	0	}	,
+	{	0x3813	,	0x02	,	0	,	0	}	,
+	{	0x3630	,	0x2e	,	0	,	0	}	,
+	{	0x3632	,	0xe2	,	0	,	0	}	,
+	{	0x3633	,	0x23	,	0	,	0	}	,
+	{	0x3634	,	0x44	,	0	,	0	}	,
+	{	0x3636	,	0x06	,	0	,	0	}	,
+	{	0x3620	,	0x64	,	0	,	0	}	,
+	{	0x3621	,	0xe0	,	0	,	0	}	,
+	{	0x3600	,	0x37	,	0	,	0	}	,
+	{	0x3704	,	0xa0	,	0	,	0	}	,
+	{	0x3703	,	0x5a	,	0	,	0	}	,
+	{	0x3715	,	0x78	,	0	,	0	}	,
+	{	0x3717	,	0x01	,	0	,	0	}	,
+	{	0x3731	,	0x02	,	0	,	0	}	,
+	{	0x370b	,	0x60	,	0	,	0	}	,
+	{	0x3705	,	0x1a	,	0	,	0	}	,
+	{	0x3f05	,	0x02	,	0	,	0	}	,
+	{	0x3f06	,	0x10	,	0	,	0	}	,
+	{	0x3f01	,	0x0a	,	0	,	0	}	,
+	{	0x3a08	,	0x01	,	0	,	0	}	,
+	{	0x3a09	,	0x27	,	0	,	0	}	,
+	{	0x3a0a	,	0x00	,	0	,	0	}	,
+	{	0x3a0b	,	0xf6	,	0	,	0	}	,
+	{	0x3a0d	,	0x04	,	0	,	0	}	,
+	{	0x3a0e	,	0x03	,	0	,	0	}	,
+	{	0x3a0f	,	0x58	,	0	,	0	}	,
+	{	0x3a10	,	0x50	,	0	,	0	}	,
+	{	0x3a1b	,	0x58	,	0	,	0	}	,
+	{	0x3a1e	,	0x50	,	0	,	0	}	,
+	{	0x3a11	,	0x60	,	0	,	0	}	,
+	{	0x3a1f	,	0x28	,	0	,	300	}	,
+	{	0x4001	,	0x02	,	0	,	0	}	,
+	{	0x4004	,	0x02	,	0	,	0	}	,
+	{	0x4000	,	0x09	,	0	,	0	}	,
+	{	0x4837	,	0x24	,	0	,	0	}	,
+	{	0x4050	,	0x6e	,	0	,	0	}	,
+	{	0x4051	,	0x8f	,	0	,	0	}	,
+	{	0x0100	,	0x01	,	0	,	0	}	,
+#if 0
+	{	0x503d	,	0xc0	,	0	,	0	}	, /* test pattern */
+	{	0x503e	,	0x11	,	0	,	0	}	, /* test pattern */
+#endif
+	{	0x3501	,	0x10	,	0	,	0	}	,
+	{	0x3502	,	0x80	,	0	,	0	}	,
+	{	0x350a	,	0x00	,	0	,	0	}	,
+	{	0x350b	,	0x7f	,	0	,	0	}	,
+	{	0x3c00	,	0x04	,	0	,	300	}	,
+	{	0x3002	,	0xe4	,	0x01,	0	}	, /* enable all outputs */
+};
+
+static struct reg_value ov5647_setting_15fps_720P_1280_720[] = {
+	{	0x0100	,	0x00	,	0	,	0	}	,
+	{	0x0103	,	0x01	,	0	,	0	}	,
+	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
+	{	0x3035	,	0x41	,	0	,	0	}	,
+	{	0x3036	,	0x3d	,	0	,	0	}	,
+	{	0x303c	,	0x11	,	0	,	0	}	,
+	{	0x3106	,	0xf5	,	0	,	0	}	,
+	{	0x3821	,	0x07	,	0	,	0	}	,
+	{	0x3820	,	0x41	,	0	,	0	}	,
+	{	0x3827	,	0xec	,	0	,	0	}	,
+	{	0x370c	,	0x03	,	0	,	0	}	,
+	{	0x3612	,	0x4b	,	0	,	0	}	,
+	{	0x3618	,	0x00	,	0	,	0	}	,
+	{	0x5000	,	0x06	,	0	,	0	}	,
+	{	0x5001	,	0x00	,	0	,	0	}	,
+	{	0x5002	,	0x40	,	0	,	0	}	,
+	{	0x5003	,	0x08	,	0	,	0	}	,
+	{	0x5a00	,	0x08	,	0	,	0	}	,
+	{	0x3000	,	0x00	,	0	,	0	}	,
+	{	0x3001	,	0x00	,	0	,	0	}	,
+	{	0x3002	,	0x00	,	0	,	0	}	,
+	{	0x3016	,	0x08	,	0	,	0	}	,
+	{	0x3017	,	0xe0	,	0	,	0	}	,
+	{	0x3018	,	0x44	,	0	,	0	}	,
+	{	0x301c	,	0xf8	,	0	,	0	}	,
+	{	0x301d	,	0xf0	,	0	,	0	}	,
+	{	0x3a18	,	0x00	,	0	,	0	}	,
+	{	0x3a19	,	0xf8	,	0	,	0	}	,
+	{	0x3c01	,	0x80	,	0	,	0	}	,
+	{	0x3b07	,	0x0c	,	0	,	0	}	,
+	{	0x380c	,	0x06	,	0	,	0	}	,
+	{	0x380d	,	0xd6	,	0	,	0	}	,
+	{	0x380e	,	0x03	,	0	,	0	}	,
+	{	0x380f	,	0xd8	,	0	,	0	}	,
+	{	0x3814	,	0x31	,	0	,	0	}	,
+	{	0x3815	,	0x31	,	0	,	0	}	,
+	{	0x3708	,	0x64	,	0	,	0	}	,
+	{	0x3709	,	0x52	,	0	,	0	}	,
+	{	0x3808	,	0x05	,	0	,	0	}	,
+	{	0x3809	,	0x00	,	0	,	0	}	,
+	{	0x380a	,	0x02	,	0	,	0	}	,
+	{	0x380b	,	0xd0	,	0	,	0	}	,
+	{	0x3800	,	0x00	,	0	,	0	}	,
+	{	0x3801	,	0x00	,	0	,	0	}	,
+	{	0x3802	,	0x00	,	0	,	0	}	,
+	{	0x3803	,	0x00	,	0	,	0	}	,
+	{	0x3804	,	0x0a	,	0	,	0	}	,
+	{	0x3805	,	0x3f	,	0	,	0	}	,
+	{	0x3806	,	0x06	,	0	,	0	}	,
+	{	0x3807	,	0xb2	,	0	,	0	}	,
+	{	0x3811	,	0x08	,	0	,	0	}	,
+	{	0x3813	,	0x02	,	0	,	0	}	,
+	{	0x3630	,	0x2e	,	0	,	0	}	,
+	{	0x3632	,	0xe2	,	0	,	0	}	,
+	{	0x3633	,	0x23	,	0	,	0	}	,
+	{	0x3634	,	0x44	,	0	,	0	}	,
+	{	0x3636	,	0x06	,	0	,	0	}	,
+	{	0x3620	,	0x64	,	0	,	0	}	,
+	{	0x3621	,	0xe0	,	0	,	0	}	,
+	{	0x3600	,	0x37	,	0	,	0	}	,
+	{	0x3704	,	0xa0	,	0	,	0	}	,
+	{	0x3703	,	0x5a	,	0	,	0	}	,
+	{	0x3715	,	0x78	,	0	,	0	}	,
+	{	0x3717	,	0x01	,	0	,	0	}	,
+	{	0x3731	,	0x02	,	0	,	0	}	,
+	{	0x370b	,	0x60	,	0	,	0	}	,
+	{	0x3705	,	0x1a	,	0	,	0	}	,
+	{	0x3f05	,	0x02	,	0	,	0	}	,
+	{	0x3f06	,	0x10	,	0	,	0	}	,
+	{	0x3f01	,	0x0a	,	0	,	0	}	,
+	{	0x3a08	,	0x01	,	0	,	0	}	,
+	{	0x3a09	,	0x27	,	0	,	0	}	,
+	{	0x3a0a	,	0x00	,	0	,	0	}	,
+	{	0x3a0b	,	0xf6	,	0	,	0	}	,
+	{	0x3a0d	,	0x04	,	0	,	0	}	,
+	{	0x3a0e	,	0x03	,	0	,	0	}	,
+	{	0x3a0f	,	0x58	,	0	,	0	}	,
+	{	0x3a10	,	0x50	,	0	,	0	}	,
+	{	0x3a1b	,	0x58	,	0	,	0	}	,
+	{	0x3a1e	,	0x50	,	0	,	0	}	,
+	{	0x3a11	,	0x60	,	0	,	0	}	,
+	{	0x3a1f	,	0x28	,	0	,	300	}	,
+	{	0x4001	,	0x02	,	0	,	0	}	,
+	{	0x4004	,	0x02	,	0	,	0	}	,
+	{	0x4000	,	0x09	,	0	,	0	}	,
+	{	0x4837	,	0x24	,	0	,	0	}	,
+	{	0x4050	,	0x6e	,	0	,	0	}	,
+	{	0x4051	,	0x8f	,	0	,	0	}	,
+	{	0x0100	,	0x01	,	0	,	0	}	,
+#if 0
+	{	0x503d	,	0xc0	,	0	,	0	}	, /* test pattern */
+	{	0x503e	,	0x11	,	0	,	0	}	, /* test pattern */
+#endif
+	{	0x3501	,	0x10	,	0	,	0	}	,
+	{	0x3502	,	0x80	,	0	,	0	}	,
+	{	0x350a	,	0x00	,	0	,	0	}	,
+	{	0x350b	,	0x7f	,	0	,	0	}	,
+	{	0x3c00	,	0x04	,	0	,	300	}	,
+	{	0x3002	,	0xe4	,	0x01,	0	}	, /* enable all outputs */
+};
+
+static struct reg_value ov5647_setting_30fps_1080P_1920_1080[] = {
+	{	0x0100	,	0x00	,	0	,	0	}	,
+	{	0x0103	,	0x01	,	0	,	0	}	,
+	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
+	{	0x3035	,	0x21	,	0	,	0	}	,
+	{	0x3036	,	0x7b	,	0	,	0	}	,
+	{	0x303c	,	0x11	,	0	,	0	}	,
+	{	0x3106	,	0xf5	,	0	,	0	}	,
+	{	0x3821	,	0x06	,	0	,	0	}	,
+	{	0x3820	,	0x00	,	0	,	0	}	,
+	{	0x3827	,	0xec	,	0	,	0	}	,
+	{	0x370c	,	0x03	,	0	,	0	}	,
+	{	0x3612	,	0x4b	,	0	,	0	}	,
+	{	0x3618	,	0x04	,	0	,	0	}	,
+	{	0x5000	,	0x06	,	0	,	0	}	,
+	{	0x5001	,	0x00	,	0	,	0	}	,
+	{	0x5002	,	0x40	,	0	,	0	}	,
+	{	0x5003	,	0x08	,	0	,	0	}	,
+	{	0x5a00	,	0x08	,	0	,	0	}	,
+	{	0x3000	,	0x00	,	0	,	0	}	,
+	{	0x3001	,	0x00	,	0	,	0	}	,
+	{	0x3002	,	0x00	,	0	,	0	}	,
+	{	0x3016	,	0x08	,	0	,	0	}	,
+	{	0x3017	,	0xe0	,	0	,	0	}	,
+	{	0x3018	,	0x44	,	0	,	0	}	,
+	{	0x301c	,	0xf8	,	0	,	0	}	,
+	{	0x301d	,	0xf0	,	0	,	0	}	,
+	{	0x3a18	,	0x00	,	0	,	0	}	,
+	{	0x3a19	,	0xf8	,	0	,	0	}	,
+	{	0x3c01	,	0x80	,	0	,	0	}	,
+	{	0x3b07	,	0x0c	,	0	,	0	}	,
+	{	0x380c	,	0x36	,	0	,	0	}	,
+	{	0x380d	,	0x4e	,	0	,	0	}	,
+	{	0x380e	,	0x04	,	0	,	0	}	,
+	{	0x380f	,	0x60	,	0	,	0	}	,
+	{	0x3814	,	0x11	,	0	,	0	}	,
+	{	0x3815	,	0x11	,	0	,	0	}	,
+	{	0x3708	,	0x64	,	0	,	0	}	,
+	{	0x3709	,	0x52	,	0	,	0	}	,
+	{	0x3808	,	0x07	,	0	,	0	}	,
+	{	0x3809	,	0x80	,	0	,	0	}	,
+	{	0x380a	,	0x04	,	0	,	0	}	,
+	{	0x380b	,	0x39	,	0	,	0	}	,
+	{	0x3800	,	0x01	,	0	,	0	}	,
+	{	0x3801	,	0x5c	,	0	,	0	}	,
+	{	0x3802	,	0x01	,	0	,	0	}	,
+	{	0x3803	,	0xb2	,	0	,	0	}	,
+	{	0x3804	,	0x08	,	0	,	0	}	,
+	{	0x3805	,	0xe7	,	0	,	0	}	,
+	{	0x3806	,	0x05	,	0	,	0	}	,
+	{	0x3807	,	0xf1	,	0	,	0	}	,
+	{	0x3811	,	0x08	,	0	,	0	}	,
+	{	0x3813	,	0x02	,	0	,	0	}	,
+	{	0x3630	,	0x2e	,	0	,	0	}	,
+	{	0x3632	,	0xe2	,	0	,	0	}	,
+	{	0x3633	,	0x23	,	0	,	0	}	,
+	{	0x3634	,	0x44	,	0	,	0	}	,
+	{	0x3636	,	0x06	,	0	,	0	}	,
+	{	0x3620	,	0x64	,	0	,	0	}	,
+	{	0x3621	,	0xe0	,	0	,	0	}	,
+	{	0x3600	,	0x37	,	0	,	0	}	,
+	{	0x3704	,	0xa0	,	0	,	0	}	,
+	{	0x3703	,	0x5a	,	0	,	0	}	,
+	{	0x3715	,	0x78	,	0	,	0	}	,
+	{	0x3717	,	0x01	,	0	,	0	}	,
+	{	0x3731	,	0x02	,	0	,	0	}	,
+	{	0x370b	,	0x60	,	0	,	0	}	,
+	{	0x3705	,	0x1a	,	0	,	0	}	,
+	{	0x3f05	,	0x02	,	0	,	0	}	,
+	{	0x3f06	,	0x10	,	0	,	0	}	,
+	{	0x3f01	,	0x0a	,	0	,	0	}	,
+	{	0x3a08	,	0x01	,	0	,	0	}	,
+	{	0x3a09	,	0x27	,	0	,	0	}	,
+	{	0x3a0a	,	0x00	,	0	,	0	}	,
+	{	0x3a0b	,	0xf6	,	0	,	0	}	,
+	{	0x3a0d	,	0x04	,	0	,	0	}	,
+	{	0x3a0e	,	0x03	,	0	,	0	}	,
+	{	0x3a0f	,	0x58	,	0	,	0	}	,
+	{	0x3a10	,	0x50	,	0	,	0	}	,
+	{	0x3a1b	,	0x58	,	0	,	0	}	,
+	{	0x3a1e	,	0x50	,	0	,	0	}	,
+	{	0x3a11	,	0x60	,	0	,	0	}	,
+	{	0x3a1f	,	0x28	,	0	,	300	}	,
+	{	0x4001	,	0x02	,	0	,	0	}	,
+	{	0x4004	,	0x02	,	0	,	0	}	,
+	{	0x4000	,	0x09	,	0	,	0	}	,
+	{	0x4837	,	0x24	,	0	,	0	}	,
+	{	0x4050	,	0x6e	,	0	,	0	}	,
+	{	0x4051	,	0x8f	,	0	,	0	}	,
+	{	0x0100	,	0x01	,	0	,	0	}	,
+#if 0
+	{	0x503d	,	0xc0	,	0	,	0	}	, /* test pattern */
+	{	0x503e	,	0x11	,	0	,	0	}	, /* test pattern */
+#endif
+	{	0x3501	,	0x10	,	0	,	0	}	,
+	{	0x3502	,	0x80	,	0	,	0	}	,
+	{	0x350a	,	0x00	,	0	,	0	}	,
+	{	0x350b	,	0x7f	,	0	,	0	}	,
+	{	0x3c00	,	0x04	,	0	,	300	}	,
+	{	0x3002	,	0xe4	,	0x01,	0	}	, /* enable all outputs */
+};
+
+static struct reg_value ov5647_setting_15fps_1080P_1920_1080[] = {
+	{	0x0100	,	0x00	,	0	,	0	}	,
+	{	0x0103	,	0x01	,	0	,	0	}	,
+	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
+	{	0x3035	,	0x41	,	0	,	0	}	,
+	{	0x3036	,	0x7b	,	0	,	0	}	,
+	{	0x303c	,	0x11	,	0	,	0	}	,
+	{	0x3106	,	0xf5	,	0	,	0	}	,
+	{	0x3821	,	0x06	,	0	,	0	}	,
+	{	0x3820	,	0x00	,	0	,	0	}	,
+	{	0x3827	,	0xec	,	0	,	0	}	,
+	{	0x370c	,	0x03	,	0	,	0	}	,
+	{	0x3612	,	0x4b	,	0	,	0	}	,
+	{	0x3618	,	0x04	,	0	,	0	}	,
+	{	0x5000	,	0x06	,	0	,	0	}	,
+	{	0x5001	,	0x00	,	0	,	0	}	,
+	{	0x5002	,	0x40	,	0	,	0	}	,
+	{	0x5003	,	0x08	,	0	,	0	}	,
+	{	0x5a00	,	0x08	,	0	,	0	}	,
+	{	0x3000	,	0x00	,	0	,	0	}	,
+	{	0x3001	,	0x00	,	0	,	0	}	,
+	{	0x3002	,	0x00	,	0	,	0	}	,
+	{	0x3016	,	0x08	,	0	,	0	}	,
+	{	0x3017	,	0xe0	,	0	,	0	}	,
+	{	0x3018	,	0x44	,	0	,	0	}	,
+	{	0x301c	,	0xf8	,	0	,	0	}	,
+	{	0x301d	,	0xf0	,	0	,	0	}	,
+	{	0x3a18	,	0x00	,	0	,	0	}	,
+	{	0x3a19	,	0xf8	,	0	,	0	}	,
+	{	0x3c01	,	0x80	,	0	,	0	}	,
+	{	0x3b07	,	0x0c	,	0	,	0	}	,
+	{	0x380c	,	0x36	,	0	,	0	}	,
+	{	0x380d	,	0x4e	,	0	,	0	}	,
+	{	0x380e	,	0x04	,	0	,	0	}	,
+	{	0x380f	,	0x60	,	0	,	0	}	,
+	{	0x3814	,	0x11	,	0	,	0	}	,
+	{	0x3815	,	0x11	,	0	,	0	}	,
+	{	0x3708	,	0x64	,	0	,	0	}	,
+	{	0x3709	,	0x52	,	0	,	0	}	,
+	{	0x3808	,	0x07	,	0	,	0	}	,
+	{	0x3809	,	0x80	,	0	,	0	}	,
+	{	0x380a	,	0x04	,	0	,	0	}	,
+	{	0x380b	,	0x39	,	0	,	0	}	,
+	{	0x3800	,	0x01	,	0	,	0	}	,
+	{	0x3801	,	0x5c	,	0	,	0	}	,
+	{	0x3802	,	0x01	,	0	,	0	}	,
+	{	0x3803	,	0xb2	,	0	,	0	}	,
+	{	0x3804	,	0x08	,	0	,	0	}	,
+	{	0x3805	,	0xe7	,	0	,	0	}	,
+	{	0x3806	,	0x05	,	0	,	0	}	,
+	{	0x3807	,	0xf1	,	0	,	0	}	,
+	{	0x3811	,	0x08	,	0	,	0	}	,
+	{	0x3813	,	0x02	,	0	,	0	}	,
+	{	0x3630	,	0x2e	,	0	,	0	}	,
+	{	0x3632	,	0xe2	,	0	,	0	}	,
+	{	0x3633	,	0x23	,	0	,	0	}	,
+	{	0x3634	,	0x44	,	0	,	0	}	,
+	{	0x3636	,	0x06	,	0	,	0	}	,
+	{	0x3620	,	0x64	,	0	,	0	}	,
+	{	0x3621	,	0xe0	,	0	,	0	}	,
+	{	0x3600	,	0x37	,	0	,	0	}	,
+	{	0x3704	,	0xa0	,	0	,	0	}	,
+	{	0x3703	,	0x5a	,	0	,	0	}	,
+	{	0x3715	,	0x78	,	0	,	0	}	,
+	{	0x3717	,	0x01	,	0	,	0	}	,
+	{	0x3731	,	0x02	,	0	,	0	}	,
+	{	0x370b	,	0x60	,	0	,	0	}	,
+	{	0x3705	,	0x1a	,	0	,	0	}	,
+	{	0x3f05	,	0x02	,	0	,	0	}	,
+	{	0x3f06	,	0x10	,	0	,	0	}	,
+	{	0x3f01	,	0x0a	,	0	,	0	}	,
+	{	0x3a08	,	0x01	,	0	,	0	}	,
+	{	0x3a09	,	0x27	,	0	,	0	}	,
+	{	0x3a0a	,	0x00	,	0	,	0	}	,
+	{	0x3a0b	,	0xf6	,	0	,	0	}	,
+	{	0x3a0d	,	0x04	,	0	,	0	}	,
+	{	0x3a0e	,	0x03	,	0	,	0	}	,
+	{	0x3a0f	,	0x58	,	0	,	0	}	,
+	{	0x3a10	,	0x50	,	0	,	0	}	,
+	{	0x3a1b	,	0x58	,	0	,	0	}	,
+	{	0x3a1e	,	0x50	,	0	,	0	}	,
+	{	0x3a11	,	0x60	,	0	,	0	}	,
+	{	0x3a1f	,	0x28	,	0	,	300	}	,
+	{	0x4001	,	0x02	,	0	,	0	}	,
+	{	0x4004	,	0x02	,	0	,	0	}	,
+	{	0x4000	,	0x09	,	0	,	0	}	,
+	{	0x4837	,	0x24	,	0	,	0	}	,
+	{	0x4050	,	0x6e	,	0	,	0	}	,
+	{	0x4051	,	0x8f	,	0	,	0	}	,
+	{	0x0100	,	0x01	,	0	,	0	}	,
+#if 0
+	{	0x503d	,	0xc0	,	0	,	0	}	, /* test pattern */
+	{	0x503e	,	0x11	,	0	,	0	}	, /* test pattern */
+#endif
+	{	0x3501	,	0x10	,	0	,	0	}	,
+	{	0x3502	,	0x80	,	0	,	0	}	,
+	{	0x350a	,	0x00	,	0	,	0	}	,
+	{	0x350b	,	0x7f	,	0	,	0	}	,
+	{	0x3c00	,	0x04	,	0	,	300	}	,
+	{	0x3002	,	0xe4	,	0x01,	0	}	, /* enable all outputs */
+};
+
+static struct reg_value ov5647_setting_30fps_VGA_640_480[] = {
+	{	0x0100	,	0x00	,	0	,	0	}	,
+	{	0x0103	,	0x01	,	0	,	0	}	,
+	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
+	{	0x3035	,	0x21	,	0	,	0	}	,
+	{	0x3036	,	0x52	,	0	,	0	}	,
+	{	0x303c	,	0x11	,	0	,	0	}	,
+	{	0x3106	,	0xf5	,	0	,	0	}	,
+	{	0x3821	,	0x07	,	0	,	0	}	,
+	{	0x3820	,	0x41	,	0	,	0	}	,
+	{	0x3827	,	0xec	,	0	,	0	}	,
+	{	0x370c	,	0x03	,	0	,	0	}	,
+	{	0x3612	,	0x4b	,	0	,	0	}	,
+	{	0x3618	,	0x00	,	0	,	0	}	,
+	{	0x5000	,	0x06	,	0	,	0	}	,
+	{	0x5001	,	0x00	,	0	,	0	}	,
+	{	0x5002	,	0x40	,	0	,	0	}	,
+	{	0x5003	,	0x08	,	0	,	0	}	,
+	{	0x5a00	,	0x08	,	0	,	0	}	,
+	{	0x3000	,	0x00	,	0	,	0	}	,
+	{	0x3001	,	0x00	,	0	,	0	}	,
+	{	0x3002	,	0x00	,	0	,	0	}	,
+	{	0x3016	,	0x08	,	0	,	0	}	,
+	{	0x3017	,	0xe0	,	0	,	0	}	,
+	{	0x3018	,	0x44	,	0	,	0	}	,
+	{	0x301c	,	0xf8	,	0	,	0	}	,
+	{	0x301d	,	0xf0	,	0	,	0	}	,
+	{	0x3a18	,	0x00	,	0	,	0	}	,
+	{	0x3a19	,	0xf8	,	0	,	0	}	,
+	{	0x3c01	,	0x80	,	0	,	0	}	,
+	{	0x3b07	,	0x0c	,	0	,	0	}	,
+	{	0x380c	,	0x07	,	0	,	0	}	,
+	{	0x380d	,	0x68	,	0	,	0	}	,
+	{	0x380e	,	0x03	,	0	,	0	}	,
+	{	0x380f	,	0xd8	,	0	,	0	}	,
+	{	0x3814	,	0x71	,	0	,	0	}	,
+	{	0x3815	,	0x71	,	0	,	0	}	,
+	{	0x3708	,	0x64	,	0	,	0	}	,
+	{	0x3709	,	0x52	,	0	,	0	}	,
+	{	0x3808	,	0x02	,	0	,	0	}	,
+	{	0x3809	,	0x80	,	0	,	0	}	,
+	{	0x380a	,	0x01	,	0	,	0	}	,
+	{	0x380b	,	0xe0	,	0	,	0	}	,
+	{	0x3800	,	0x00	,	0	,	0	}	,
+	{	0x3801	,	0x00	,	0	,	0	}	,
+	{	0x3802	,	0x00	,	0	,	0	}	,
+	{	0x3803	,	0x00	,	0	,	0	}	,
+	{	0x3804	,	0x0a	,	0	,	0	}	,
+	{	0x3805	,	0x3f	,	0	,	0	}	,
+	{	0x3806	,	0x07	,	0	,	0	}	,
+	{	0x3807	,	0xa1	,	0	,	0	}	,
+	{	0x3811	,	0x08	,	0	,	0	}	,
+	{	0x3813	,	0x02	,	0	,	0	}	,
+	{	0x3630	,	0x2e	,	0	,	0	}	,
+	{	0x3632	,	0xe2	,	0	,	0	}	,
+	{	0x3633	,	0x23	,	0	,	0	}	,
+	{	0x3634	,	0x44	,	0	,	0	}	,
+	{	0x3636	,	0x06	,	0	,	0	}	,
+	{	0x3620	,	0x64	,	0	,	0	}	,
+	{	0x3621	,	0xe0	,	0	,	0	}	,
+	{	0x3600	,	0x37	,	0	,	0	}	,
+	{	0x3704	,	0xa0	,	0	,	0	}	,
+	{	0x3703	,	0x5a	,	0	,	0	}	,
+	{	0x3715	,	0x78	,	0	,	0	}	,
+	{	0x3717	,	0x01	,	0	,	0	}	,
+	{	0x3731	,	0x02	,	0	,	0	}	,
+	{	0x370b	,	0x60	,	0	,	0	}	,
+	{	0x3705	,	0x1a	,	0	,	0	}	,
+	{	0x3f05	,	0x02	,	0	,	0	}	,
+	{	0x3f06	,	0x10	,	0	,	0	}	,
+	{	0x3f01	,	0x0a	,	0	,	0	}	,
+	{	0x3a08	,	0x01	,	0	,	0	}	,
+	{	0x3a09	,	0x27	,	0	,	0	}	,
+	{	0x3a0a	,	0x00	,	0	,	0	}	,
+	{	0x3a0b	,	0xf6	,	0	,	0	}	,
+	{	0x3a0d	,	0x04	,	0	,	0	}	,
+	{	0x3a0e	,	0x03	,	0	,	0	}	,
+	{	0x3a0f	,	0x58	,	0	,	0	}	,
+	{	0x3a10	,	0x50	,	0	,	0	}	,
+	{	0x3a1b	,	0x58	,	0	,	0	}	,
+	{	0x3a1e	,	0x50	,	0	,	0	}	,
+	{	0x3a11	,	0x60	,	0	,	0	}	,
+	{	0x3a1f	,	0x28	,	0	,	300	}	,
+	{	0x4001	,	0x02	,	0	,	0	}	,
+	{	0x4004	,	0x02	,	0	,	0	}	,
+	{	0x4000	,	0x09	,	0	,	0	}	,
+	{	0x4837	,	0x24	,	0	,	0	}	,
+	{	0x4050	,	0x6e	,	0	,	0	}	,
+	{	0x4051	,	0x8f	,	0	,	0	}	,
+	{	0x0100	,	0x01	,	0	,	0	}	,
+#if 0
+	{	0x503d	,	0xc0	,	0	,	0	}	, /* test pattern */
+	{	0x503e	,	0x11	,	0	,	0	}	, /* test pattern */
+#endif
+	{	0x3501	,	0x10	,	0	,	0	}	,
+	{	0x3502	,	0x80	,	0	,	0	}	,
+	{	0x350a	,	0x00	,	0	,	0	}	,
+	{	0x350b	,	0x7f	,	0	,	0	}	,
+	{	0x3c00	,	0x04	,	0	,	300	}	,
+	{	0x3002	,	0xe4	,	0x01,	0	}	, /* enable all outputs */
+};
+
+static struct reg_value ov5647_setting_15fps_VGA_640_480[] = {
+	{	0x0100	,	0x00	,	0	,	0	}	,
+	{	0x0103	,	0x01	,	0	,	0	}	,
+	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
+	{	0x3035	,	0x41	,	0	,	0	}	,
+	{	0x3036	,	0x52	,	0	,	0	}	,
+	{	0x303c	,	0x11	,	0	,	0	}	,
+	{	0x3106	,	0xf5	,	0	,	0	}	,
+	{	0x3821	,	0x07	,	0	,	0	}	,
+	{	0x3820	,	0x41	,	0	,	0	}	,
+	{	0x3827	,	0xec	,	0	,	0	}	,
+	{	0x370c	,	0x03	,	0	,	0	}	,
+	{	0x3612	,	0x4b	,	0	,	0	}	,
+	{	0x3618	,	0x00	,	0	,	0	}	,
+	{	0x5000	,	0x06	,	0	,	0	}	,
+	{	0x5001	,	0x00	,	0	,	0	}	,
+	{	0x5002	,	0x40	,	0	,	0	}	,
+	{	0x5003	,	0x08	,	0	,	0	}	,
+	{	0x5a00	,	0x08	,	0	,	0	}	,
+	{	0x3000	,	0x00	,	0	,	0	}	,
+	{	0x3001	,	0x00	,	0	,	0	}	,
+	{	0x3002	,	0x00	,	0	,	0	}	,
+	{	0x3016	,	0x08	,	0	,	0	}	,
+	{	0x3017	,	0xe0	,	0	,	0	}	,
+	{	0x3018	,	0x44	,	0	,	0	}	,
+	{	0x301c	,	0xf8	,	0	,	0	}	,
+	{	0x301d	,	0xf0	,	0	,	0	}	,
+	{	0x3a18	,	0x00	,	0	,	0	}	,
+	{	0x3a19	,	0xf8	,	0	,	0	}	,
+	{	0x3c01	,	0x80	,	0	,	0	}	,
+	{	0x3b07	,	0x0c	,	0	,	0	}	,
+	{	0x380c	,	0x07	,	0	,	0	}	,
+	{	0x380d	,	0x68	,	0	,	0	}	,
+	{	0x380e	,	0x03	,	0	,	0	}	,
+	{	0x380f	,	0xd8	,	0	,	0	}	,
+	{	0x3814	,	0x71	,	0	,	0	}	,
+	{	0x3815	,	0x71	,	0	,	0	}	,
+	{	0x3708	,	0x64	,	0	,	0	}	,
+	{	0x3709	,	0x52	,	0	,	0	}	,
+	{	0x3808	,	0x02	,	0	,	0	}	,
+	{	0x3809	,	0x80	,	0	,	0	}	,
+	{	0x380a	,	0x01	,	0	,	0	}	,
+	{	0x380b	,	0xe0	,	0	,	0	}	,
+	{	0x3800	,	0x00	,	0	,	0	}	,
+	{	0x3801	,	0x00	,	0	,	0	}	,
+	{	0x3802	,	0x00	,	0	,	0	}	,
+	{	0x3803	,	0x00	,	0	,	0	}	,
+	{	0x3804	,	0x0a	,	0	,	0	}	,
+	{	0x3805	,	0x3f	,	0	,	0	}	,
+	{	0x3806	,	0x07	,	0	,	0	}	,
+	{	0x3807	,	0xa1	,	0	,	0	}	,
+	{	0x3811	,	0x08	,	0	,	0	}	,
+	{	0x3813	,	0x02	,	0	,	0	}	,
+	{	0x3630	,	0x2e	,	0	,	0	}	,
+	{	0x3632	,	0xe2	,	0	,	0	}	,
+	{	0x3633	,	0x23	,	0	,	0	}	,
+	{	0x3634	,	0x44	,	0	,	0	}	,
+	{	0x3636	,	0x06	,	0	,	0	}	,
+	{	0x3620	,	0x64	,	0	,	0	}	,
+	{	0x3621	,	0xe0	,	0	,	0	}	,
+	{	0x3600	,	0x37	,	0	,	0	}	,
+	{	0x3704	,	0xa0	,	0	,	0	}	,
+	{	0x3703	,	0x5a	,	0	,	0	}	,
+	{	0x3715	,	0x78	,	0	,	0	}	,
+	{	0x3717	,	0x01	,	0	,	0	}	,
+	{	0x3731	,	0x02	,	0	,	0	}	,
+	{	0x370b	,	0x60	,	0	,	0	}	,
+	{	0x3705	,	0x1a	,	0	,	0	}	,
+	{	0x3f05	,	0x02	,	0	,	0	}	,
+	{	0x3f06	,	0x10	,	0	,	0	}	,
+	{	0x3f01	,	0x0a	,	0	,	0	}	,
+	{	0x3a08	,	0x01	,	0	,	0	}	,
+	{	0x3a09	,	0x27	,	0	,	0	}	,
+	{	0x3a0a	,	0x00	,	0	,	0	}	,
+	{	0x3a0b	,	0xf6	,	0	,	0	}	,
+	{	0x3a0d	,	0x04	,	0	,	0	}	,
+	{	0x3a0e	,	0x03	,	0	,	0	}	,
+	{	0x3a0f	,	0x58	,	0	,	0	}	,
+	{	0x3a10	,	0x50	,	0	,	0	}	,
+	{	0x3a1b	,	0x58	,	0	,	0	}	,
+	{	0x3a1e	,	0x50	,	0	,	0	}	,
+	{	0x3a11	,	0x60	,	0	,	0	}	,
+	{	0x3a1f	,	0x28	,	0	,	300	}	,
+	{	0x4001	,	0x02	,	0	,	0	}	,
+	{	0x4004	,	0x02	,	0	,	0	}	,
+	{	0x4000	,	0x09	,	0	,	0	}	,
+	{	0x4837	,	0x24	,	0	,	0	}	,
+	{	0x4050	,	0x6e	,	0	,	0	}	,
+	{	0x4051	,	0x8f	,	0	,	0	}	,
+	{	0x0100	,	0x01	,	0	,	0	}	,
+#if 0
+	{	0x503d	,	0xc0	,	0	,	0	}	, /* test pattern */
+	{	0x503e	,	0x11	,	0	,	0	}	, /* test pattern */
+#endif
+	{	0x3501	,	0x10	,	0	,	0	}	,
+	{	0x3502	,	0x80	,	0	,	0	}	,
+	{	0x350a	,	0x00	,	0	,	0	}	,
+	{	0x350b	,	0x7f	,	0	,	0	}	,
+	{	0x3c00	,	0x04	,	0	,	300	}	,
+	{	0x3002	,	0xe4	,	0x01,	0	}	, /* enable all outputs */
+};
 
 static struct ov5647_mode_info ov5647_mode_info_data[2][ov5647_mode_MAX + 1] = {
 	{
 		{ov5647_mode_960P_1280_960, SUBSAMPLING, 1280,  960,
-		ov5647_setting_30fps_960P_1280_960,
-		ARRAY_SIZE(ov5647_setting_30fps_960P_1280_960)},
+		ov5647_setting_15fps_960P_1280_960,
+		ARRAY_SIZE(ov5647_setting_15fps_960P_1280_960)},
+		{ov5647_mode_720P_1280_720, SUBSAMPLING, 1280,  720,
+		ov5647_setting_15fps_720P_1280_720,
+		ARRAY_SIZE(ov5647_setting_15fps_720P_1280_720)},
+		{ov5647_mode_1080P_1920_1080, SCALING, 1920,  1080,
+		ov5647_setting_15fps_1080P_1920_1080,
+		ARRAY_SIZE(ov5647_setting_15fps_1080P_1920_1080)},
+		{ov5647_mode_VGA_640_480, SUBSAMPLING, 640,  480,
+		ov5647_setting_15fps_VGA_640_480,
+		ARRAY_SIZE(ov5647_setting_15fps_VGA_640_480)},
 	},
 	{
 		{ov5647_mode_960P_1280_960, SUBSAMPLING, 1280,  960,
 		ov5647_setting_30fps_960P_1280_960,
 		ARRAY_SIZE(ov5647_setting_30fps_960P_1280_960)},
+		{ov5647_mode_720P_1280_720, SUBSAMPLING, 1280,  720,
+		ov5647_setting_30fps_720P_1280_720,
+		ARRAY_SIZE(ov5647_setting_30fps_720P_1280_720)},
+		{ov5647_mode_1080P_1920_1080, SCALING, 1920,  1080,
+		ov5647_setting_30fps_1080P_1920_1080,
+		ARRAY_SIZE(ov5647_setting_30fps_1080P_1920_1080)},
+		{ov5647_mode_VGA_640_480, SUBSAMPLING, 640,  480,
+		ov5647_setting_30fps_VGA_640_480,
+		ARRAY_SIZE(ov5647_setting_30fps_VGA_640_480)},
 	},
 };
 
@@ -248,10 +981,17 @@ static void ov5647_standby(s32 enable)
 	if (!gpio_is_valid(pwn_gpio))
 		return;
 
-	if (enable)
-		gpio_set_value(pwn_gpio, !pwn_active);
-	else
-		gpio_set_value(pwn_gpio, pwn_active);
+	if (enable) {
+		gpio_set_value(pwn_gpio, !powon_active);
+		if (gpio_is_valid(led_gpio))
+			gpio_set_value(led_gpio, !led_active);
+	}
+	else {
+		gpio_set_value(pwn_gpio, powon_active);
+		if (gpio_is_valid(led_gpio))
+			gpio_set_value(led_gpio, led_active);
+	}
+
 	pr_debug("ov5647_mipi_camera_powerdown: powerdown=%x, power_gp=0x%x\n", enable, pwn_gpio);
 	msleep(2);
 }
@@ -266,10 +1006,10 @@ static void ov5647_reset(void)
 
 	/* camera power dowmn */
 	if (gpio_is_valid(pwn_gpio)) {
-		gpio_set_value(pwn_gpio, 1);
+		gpio_set_value(pwn_gpio, !powon_active);
 		msleep(5);
 
-		gpio_set_value(pwn_gpio, 0);
+		gpio_set_value(pwn_gpio, powon_active);
 		msleep(5);
 	}
 
@@ -280,7 +1020,7 @@ static void ov5647_reset(void)
 	msleep(5);
 
 	if (gpio_is_valid(pwn_gpio))
-		gpio_set_value(pwn_gpio, !pwn_active);
+		gpio_set_value(pwn_gpio, !powon_active);
 }
 
 static int ov5647_power_on(struct device *dev)
@@ -771,7 +1511,8 @@ static int ov5647_change_mode_exposure_calc(enum ov5647_frame_rate frame_rate,
 
 	/* read preview shutter */
 	prev_shutter = OV5647_get_shutter();
-	if ((binning_on()) && (mode != ov5647_mode_960P_1280_960))
+	if ((binning_on()) && (mode != ov5647_mode_960P_1280_960) &&
+		(mode != ov5647_mode_720P_1280_720) && (mode != ov5647_mode_1080P_1920_1080))
 		prev_shutter *= 2;
 
 	/* read preview gain */
@@ -947,7 +1688,7 @@ static int ov5647_init_mode(enum ov5647_frame_rate frame_rate,
 	if (mode == ov5647_mode_INIT)
 		mipi_csi2_reset(mipi_csi2_info);
 
-	/* reg 0x3034 == 0x08 is 8bit mode */
+	/* reg 0x3034[3:0] == 0x8 is 8bit mode */
 	mipi_csi2_set_datatype(mipi_csi2_info, MIPI_DT_RAW8);
 
 	if (orig_mode != ov5647_mode_INIT) {
@@ -959,11 +1700,10 @@ static int ov5647_init_mode(enum ov5647_frame_rate frame_rate,
 	}
 
 	if (mode == ov5647_mode_INIT) {
-		pModeSetting = ov5647_setting_30fps_960P_1280_960;
-		ArySize = ARRAY_SIZE(ov5647_setting_30fps_960P_1280_960);
+		int index = (int)ov5647_data.streamcap.capturemode;
 
-		ov5647_data.pix.width = 1280;
-		ov5647_data.pix.height = 960;
+		pModeSetting = ov5647_mode_info_data[frame_rate][index].init_data_ptr;
+		ArySize = ov5647_mode_info_data[frame_rate][index].init_data_size;
 		retval = ov5647_download_firmware(pModeSetting, ArySize);
 		if (retval < 0)
 			goto err;
@@ -1593,7 +2333,38 @@ static ssize_t set_reg(struct device *dev,
 	}
 	return count;
 }
+
+/* XXX: workaround for v4l2 client except for gstreamer-imx */
+static ssize_t show_mode(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "ov5647 mode = 0x%02x\n", (int)ov5647_data.streamcap.capturemode);
+}
+
+static ssize_t set_mode(struct device *dev,
+			struct device_attribute *attr,
+		       const char *buf, size_t count)
+{
+	unsigned long mode;
+
+	mode = simple_strtoul(buf, NULL, 10);
+	if ((enum ov5647_mode)mode >= ov5647_mode_MIN &&
+		(enum ov5647_mode)mode <= ov5647_mode_MAX) {
+
+		ov5647_data.streamcap.capturemode = mode;
+		ov5647_data.pix.width =
+			max(ov5647_mode_info_data[0][mode].width,
+				ov5647_mode_info_data[1][mode].width);
+		ov5647_data.pix.height =
+			max(ov5647_mode_info_data[0][mode].height,
+				ov5647_mode_info_data[1][mode].height);
+	}
+
+	return count;
+}
+
 static DEVICE_ATTR(ov5647_reg, S_IRUGO|S_IWUGO, show_reg, set_reg);
+static DEVICE_ATTR(ov5647_mode, S_IRUGO|S_IWUGO, show_mode, set_mode);
 
 /*!
  * ov5647 I2C probe function
@@ -1605,7 +2376,7 @@ static int ov5647_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	struct device *dev = &client->dev;
-	int retval, init;
+	int retval, init, gpio;
 	u8 chip_id_high, chip_id_low;
 	struct sensor_data *sensor = &ov5647_data;
 	enum of_gpio_flags flags;
@@ -1613,7 +2384,9 @@ static int ov5647_probe(struct i2c_client *client,
 	/* request power down pin */
 	pwn_gpio = of_get_named_gpio_flags(dev->of_node, "pwn-gpios", 0, &flags);
 	if (gpio_is_valid(pwn_gpio)) {
-		pwn_active = !(flags & OF_GPIO_ACTIVE_LOW);
+		/* powon_active - camera power on    */
+		/* !powon_active - camera power down */
+		powon_active = !(flags & OF_GPIO_ACTIVE_LOW);
 		init = (flags & OF_GPIO_ACTIVE_LOW) ? GPIOF_OUT_INIT_HIGH : GPIOF_OUT_INIT_LOW;
 
 		retval = devm_gpio_request_one(dev, pwn_gpio, init, "ov5647_mipi_pwdn");
@@ -1626,6 +2399,8 @@ static int ov5647_probe(struct i2c_client *client,
 	/* request reset pin */
 	rst_gpio = of_get_named_gpio_flags(dev->of_node, "rst-gpios", 0, &flags);
 	if (gpio_is_valid(rst_gpio)) {
+		/* rst_active - camera reset        */
+		/* !rst_active - clear camera reset */
 		rst_active = !(flags & OF_GPIO_ACTIVE_LOW);
 		init = (flags & OF_GPIO_ACTIVE_LOW) ? GPIOF_OUT_INIT_HIGH : GPIOF_OUT_INIT_LOW;
 
@@ -1633,6 +2408,21 @@ static int ov5647_probe(struct i2c_client *client,
 		if (retval < 0) {
 			dev_warn(dev, "request of ov5647_mipi_reset failed");
 			rst_gpio = -EINVAL;
+		}
+	}
+
+	/* request LED(for sanity) pin */
+	gpio = of_get_named_gpio_flags(dev->of_node, "led-gpios", 0, &flags);
+	if (gpio_is_valid(gpio)) {
+		/* led_active - LED turn on    */
+		/* !led_active - LED trun off  */
+		led_active = !(flags & OF_GPIO_ACTIVE_LOW);
+		init = (flags & OF_GPIO_ACTIVE_LOW) ? GPIOF_OUT_INIT_HIGH : GPIOF_OUT_INIT_LOW;
+
+		retval = devm_gpio_request_one(dev, gpio, init, "ov5647_mipi_led");
+		if (retval < 0) {
+			dev_warn(dev, "request of led_gpio failed");
+			gpio = -EINVAL;
 		}
 	}
 
@@ -1688,7 +2478,7 @@ static int ov5647_probe(struct i2c_client *client,
 	ov5647_data.pix.height = 960;
 	ov5647_data.streamcap.capability = V4L2_MODE_HIGHQUALITY |
 					   V4L2_CAP_TIMEPERFRAME;
-	ov5647_data.streamcap.capturemode = 0;
+	ov5647_data.streamcap.capturemode = ov5647_mode_960P_1280_960;
 	ov5647_data.streamcap.timeperframe.denominator = DEFAULT_FPS;
 	ov5647_data.streamcap.timeperframe.numerator = 1;
 
@@ -1714,6 +2504,7 @@ static int ov5647_probe(struct i2c_client *client,
 	sensor->virtual_channel = sensor->csi | (sensor->ipu_id << 1);
 	ov5647_standby(1);
 
+	led_gpio = gpio;
 	ov5647_int_device.priv = &ov5647_data;
 	retval = v4l2_int_device_register(&ov5647_int_device);
 
@@ -1721,6 +2512,9 @@ static int ov5647_probe(struct i2c_client *client,
 
 	if (device_create_file(dev, &dev_attr_ov5647_reg))
 		dev_err(dev, "%s: error creating ov5647_reg entry\n", __func__);
+	if (device_create_file(dev, &dev_attr_ov5647_mode))
+		dev_err(dev, "%s: error creating ov5647_mode entry\n", __func__);
+
 	pr_info("camera ov5647_mipi is found\n");
 	return retval;
 }
