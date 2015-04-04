@@ -304,6 +304,11 @@ static int imx6_cpufreq_probe(struct platform_device *pdev)
 			unsigned long freq = be32_to_cpup(val++);
 			unsigned long volt = be32_to_cpup(val++);
 			if (freq_table[j].frequency == freq) {
+#ifdef CONFIG_MX6_VPU_352M
+				if (freq == 792000) {
+					volt = 1250000;
+				}
+#endif
 				imx6_soc_volt[soc_opp_count++] = volt;
 				break;
 			}
