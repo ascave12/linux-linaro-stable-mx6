@@ -41,7 +41,7 @@
 #define OV5647_VOLTAGE_DIGITAL_IO           1800000
 
 #define MIN_FPS 15
-#define MAX_FPS 30
+#define MAX_FPS 55
 #define DEFAULT_FPS 30
 
 #define OV5647_XCLK_MIN 6000000
@@ -83,6 +83,106 @@ struct reg_value {
 	u32 u32Delay_ms;
 };
 
+struct fps_info {
+	int detailed_fps;
+	u8 clk1_val;
+	u8 clk2_val;
+};
+
+static const struct fps_info fps_960P[] = {
+	{15, 0x41, 0x36},
+	{20, 0x41, 0x48},
+	{25, 0x21, 0x2d},
+	{30, 0x21, 0x36},
+	{35, 0x21, 0x3f},
+	{40, 0x21, 0x48},
+	{45, 0x21, 0x51},
+	{-1, 0, 0}
+};
+
+static const struct fps_info fps_720P[] = {
+	{15, 0x41, 0x32},
+	{20, 0x41, 0x43},
+	{25, 0x41, 0x53},
+	{30, 0x41, 0x64},
+	{35, 0x41, 0x74},
+	{40, 0x41, 0x86},
+	{45, 0x41, 0x96},
+	{50, 0x41, 0xa6},
+	{-1, 0, 0}
+};
+
+static const struct fps_info fps_1080P[] = {
+	{15, 0x21, 0x5d},
+	{18, 0x21, 0x6d},
+	{20, 0x21, 0x7d},
+	{22, 0x21, 0x88},
+	{24, 0x21, 0x94},
+	{26, 0x21, 0xa0},
+	{28, 0x21, 0xac},
+	{30, 0x21, 0xba},
+	{-1, 0, 0}
+};
+
+static const struct fps_info fps_vga[] = {
+	{15, 0x41, 0x36},
+	{20, 0x41, 0x48},
+	{25, 0x41, 0x5a},
+	{30, 0x21, 0x36},
+	{35, 0x21, 0x3f},
+	{40, 0x21, 0x48},
+	{45, 0x21, 0x51},
+	{50, 0x21, 0x5a},
+	{55, 0x21, 0x63},
+	{-1, 0, 0}
+};
+
+static const struct fps_info fps_xga[] = {
+	{15, 0x41, 0x36},
+	{20, 0x41, 0x48},
+	{25, 0x21, 0x2d},
+	{30, 0x21, 0x36},
+	{35, 0x21, 0x3f},
+	{40, 0x21, 0x48},
+	{45, 0x21, 0x51},
+	{-1, 0, 0}
+};
+
+static const struct fps_info fps_960_720[] = {
+	{15, 0x41, 0x32},
+	{20, 0x41, 0x43},
+	{25, 0x41, 0x53},
+	{30, 0x41, 0x64},
+	{35, 0x41, 0x74},
+	{40, 0x41, 0x86},
+	{45, 0x41, 0x96},
+	{50, 0x41, 0xa6},
+	{-1, 0, 0}
+};
+
+
+static const struct fps_info *fps_info_array[ov5647_mode_MAX + 1] = {
+	fps_960P,
+	fps_720P,
+	fps_1080P,
+	fps_vga,
+	fps_xga,
+	fps_960_720,
+	fps_vga,
+};
+
+#define CLK_REG_ARRAY_SIZE 2
+
+static const char *frame_size_str[ov5647_mode_MAX + 1] = {
+	"1280x960",
+	"1280x720",
+	"1920x1080",
+	"640x480",
+	"1024x768",
+	"960x720",
+	"640x480",
+};
+
 struct ov5647_mode_info {
 	enum ov5647_mode mode;
 	enum ov5647_downsize_mode dn_mode;
@@ -109,7 +209,7 @@ static struct reg_value ov5647_setting_30fps_960P_1280_960[] = {
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x21	,	0	,	0	}	,
-	{	0x3036	,	0x52	,	0	,	0	}	,
+	{	0x3036	,	0x36	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x07	,	0	,	0	}	,
@@ -273,7 +373,7 @@ static struct reg_value ov5647_setting_15fps_960P_1280_960[] = {
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x41	,	0	,	0	}	,
-	{	0x3036	,	0x52	,	0	,	0	}	,
+	{	0x3036	,	0x36	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x07	,	0	,	0	}	,
@@ -437,7 +537,7 @@ static struct reg_value ov5647_setting_30fps_720P_1280_720[] = {
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x41	,	0	,	0	}	,
-	{	0x3036	,	0xa0	,	0	,	0	}	,
+	{	0x3036	,	0x64	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x07	,	0	,	0	}	,
@@ -601,7 +701,7 @@ static struct reg_value ov5647_setting_15fps_720P_1280_720[] = {
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x41	,	0	,	0	}	,
-	{	0x3036	,	0x49	,	0	,	0	}	,
+	{	0x3036	,	0x32	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x07	,	0	,	0	}	,
@@ -765,7 +865,7 @@ static struct reg_value ov5647_setting_30fps_1080P_1920_1080[] = {
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x21	,	0	,	0	}	,
-	{	0x3036	,	0x7b	,	0	,	0	}	,
+	{	0x3036	,	0xba	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x06	,	0	,	0	}	,
@@ -928,8 +1028,8 @@ static struct reg_value ov5647_setting_15fps_1080P_1920_1080[] = {
 	{	0x0100	,	0x00	,	0	,	0	}	,
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
-	{	0x3035	,	0x41	,	0	,	0	}	,
-	{	0x3036	,	0x7b	,	0	,	0	}	,
+	{	0x3035	,	0x21	,	0	,	0	}	,
+	{	0x3036	,	0x5d	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x06	,	0	,	0	}	,
@@ -1425,7 +1525,7 @@ static struct reg_value ov5647_setting_30fps_XGA_1024_768[] = {
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x21	,	0	,	0	}	,
-	{	0x3036	,	0x52	,	0	,	0	}	,
+	{	0x3036	,	0x36	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x07	,	0	,	0	}	,
@@ -1589,7 +1689,7 @@ static struct reg_value ov5647_setting_15fps_XGA_1024_768[] = {
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x41	,	0	,	0	}	,
-	{	0x3036	,	0x52	,	0	,	0	}	,
+	{	0x3036	,	0x36	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x07	,	0	,	0	}	,
@@ -1753,7 +1853,7 @@ static struct reg_value ov5647_setting_30fps_960_720[] = {
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x41	,	0	,	0	}	,
-	{	0x3036	,	0xa0	,	0	,	0	}	,
+	{	0x3036	,	0x64	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x07	,	0	,	0	}	,
@@ -1917,7 +2017,7 @@ static struct reg_value ov5647_setting_15fps_960_720[] = {
 	{	0x0103	,	0x01	,	0	,	0	}	,
 	{	0x3034	,	0x18	,	0	,	0	}	,  /* was 0x1A */
 	{	0x3035	,	0x41	,	0	,	0	}	,
-	{	0x3036	,	0x49	,	0	,	0	}	,
+	{	0x3036	,	0x32	,	0	,	0	}	,
 	{	0x303c	,	0x11	,	0	,	0	}	,
 	{	0x3106	,	0xf5	,	0	,	0	}	,
 	{	0x3821	,	0x07	,	0	,	0	}	,
@@ -2153,6 +2253,39 @@ static struct i2c_driver ov5647_i2c_driver = {
 	.remove = ov5647_remove,
 	.id_table = ov5647_id,
 };
+
+static enum ov5647_frame_rate ov5647_get_clk_regval(enum ov5647_mode mode, int fps, struct reg_value *clks)
+{
+	const struct fps_info *ftmp = fps_info_array[mode];
+	enum ov5647_frame_rate frame_rate;
+	int cnt, tgt;
+
+	for (cnt = 0, tgt = 0; ; cnt++) {
+		if (ftmp[cnt].detailed_fps < 0 || ftmp[cnt].detailed_fps > fps)
+			break;
+
+		tgt = cnt;
+	}
+
+	clks[0].u16RegAddr = 0x3035;
+	clks[0].u8Val = ftmp[tgt].clk1_val;
+	clks[0].u8Mask = 0;
+	clks[0].u32Delay_ms = 0;
+
+	clks[1].u16RegAddr = 0x3036;
+	clks[1].u8Val = ftmp[tgt].clk2_val;
+	clks[1].u8Mask = 0;
+	clks[1].u32Delay_ms = 0;
+
+	if (ftmp[tgt].detailed_fps <= 15)
+		frame_rate = ov5647_15_fps;
+	else
+		frame_rate = ov5647_30_fps;
+
+	pr_info("ov5647_mipi: %s@%dfps\n", frame_size_str[mode], ftmp[tgt].detailed_fps);
+
+	return frame_rate;
+}
 
 static void ov5647_standby(s32 enable)
 {
@@ -2657,7 +2790,7 @@ err:
  * go through exposure calcualtion
  */
 static int ov5647_change_mode_exposure_calc(enum ov5647_frame_rate frame_rate,
-				enum ov5647_mode mode)
+				enum ov5647_mode mode, struct reg_value *clks)
 {
 	struct reg_value *pModeSetting = NULL;
 	s32 ArySize = 0;
@@ -2713,6 +2846,12 @@ static int ov5647_change_mode_exposure_calc(enum ov5647_frame_rate frame_rate,
 	retval = ov5647_download_firmware(pModeSetting, ArySize);
 	if (retval < 0)
 		goto err;
+
+	if (clks) {
+		retval = ov5647_download_firmware(clks, CLK_REG_ARRAY_SIZE);
+		if (retval < 0)
+			goto err;
+	}
 
 	/* read capture VTS */
 	cap_VTS = OV5647_get_VTS();
@@ -2787,7 +2926,7 @@ err:
  * change mode directly
  * */
 static int ov5647_change_mode_direct(enum ov5647_frame_rate frame_rate,
-				enum ov5647_mode mode)
+				enum ov5647_mode mode, struct reg_value *clks)
 {
 	struct reg_value *pModeSetting = NULL;
 	s32 ArySize = 0;
@@ -2820,6 +2959,12 @@ static int ov5647_change_mode_direct(enum ov5647_frame_rate frame_rate,
 	if (retval < 0)
 		goto err;
 
+	if (clks) {
+		retval = ov5647_download_firmware(clks, CLK_REG_ARRAY_SIZE);
+		if (retval < 0)
+			goto err;
+	}
+
 	OV5647_stream_on();
 
 	OV5647_turn_on_AE_AG(1);
@@ -2829,7 +2974,7 @@ err:
 }
 
 static int ov5647_init_mode(enum ov5647_frame_rate frame_rate,
-			    enum ov5647_mode mode, enum ov5647_mode orig_mode)
+			    enum ov5647_mode mode, enum ov5647_mode orig_mode, struct reg_value *clks)
 {
 	struct reg_value *pModeSetting = NULL;
 	s32 ArySize = 0;
@@ -2893,11 +3038,11 @@ static int ov5647_init_mode(enum ov5647_frame_rate frame_rate,
 			(dn_mode == SCALING && orig_dn_mode == SUBSAMPLING)) {
 		/* change between subsampling and scaling
 		 * go through exposure calucation */
-		retval = ov5647_change_mode_exposure_calc(frame_rate, mode);
+		retval = ov5647_change_mode_exposure_calc(frame_rate, mode, clks);
 	} else {
 		/* change inside subsampling or scaling
 		 * download firmware directly */
-		retval = ov5647_change_mode_direct(frame_rate, mode);
+		retval = ov5647_change_mode_direct(frame_rate, mode, clks);
 	}
 
 	if (retval < 0)
@@ -3094,6 +3239,7 @@ static int ioctl_s_parm(struct v4l2_int_device *s, struct v4l2_streamparm *a)
 	u32 tgt_fps;	/* target frames per secound */
 	enum ov5647_frame_rate frame_rate;
 	enum ov5647_mode orig_mode;
+	struct reg_value clk_regs[2];
 	int ret = 0;
 
 	/* Make sure power on */
@@ -3124,18 +3270,12 @@ static int ioctl_s_parm(struct v4l2_int_device *s, struct v4l2_streamparm *a)
 		tgt_fps = timeperframe->denominator /
 			  timeperframe->numerator;
 
-		if (tgt_fps == 15)
-			frame_rate = ov5647_15_fps;
-		else if (tgt_fps == 30)
-			frame_rate = ov5647_30_fps;
-		else {
-			pr_err(" The camera frame rate is not supported!\n");
-			return -EINVAL;
-		}
+		frame_rate = ov5647_get_clk_regval(
+				(enum ov5647_mode)a->parm.capture.capturemode, (int)tgt_fps, clk_regs);
 
 		orig_mode = sensor->streamcap.capturemode;
 		ret = ov5647_init_mode(frame_rate,
-				(u32)a->parm.capture.capturemode, orig_mode);
+				(enum ov5647_mode)a->parm.capture.capturemode, orig_mode, clk_regs);
 		if (ret < 0)
 			return ret;
 
@@ -3398,12 +3538,10 @@ static int ioctl_dev_init(struct v4l2_int_device *s)
 	tgt_fps = sensor->streamcap.timeperframe.denominator /
 		  sensor->streamcap.timeperframe.numerator;
 
-	if (tgt_fps == 15)
+	if (tgt_fps <= 15)
 		frame_rate = ov5647_15_fps;
-	else if (tgt_fps == 30)
-		frame_rate = ov5647_30_fps;
 	else
-		return -EINVAL; /* Only support 15fps or 30fps now. */
+		frame_rate = ov5647_30_fps;
 
 	mipi_csi2_info = mipi_csi2_get_info();
 
@@ -3416,7 +3554,7 @@ static int ioctl_dev_init(struct v4l2_int_device *s)
 		return -EPERM;
 	}
 
-	ret = ov5647_init_mode(frame_rate, ov5647_mode_INIT, ov5647_mode_INIT);
+	ret = ov5647_init_mode(frame_rate, ov5647_mode_INIT, ov5647_mode_INIT, NULL);
 
 	return ret;
 }
