@@ -505,7 +505,6 @@ static void __init imx6q_clocks_init(struct device_node *ccm_node)
 	imx_clk_set_parent(clk[IMX6QDL_CLK_IPU2_SEL], clk[IMX6QDL_CLK_PLL2_PFD2_396M]);
 	imx_clk_set_rate(clk[IMX6QDL_CLK_IPU2], 200000000);
 	if (cpu_is_imx6q()) {
-		imx_clk_set_parent(clk[IMX6QDL_CLK_IPU1_SEL], clk[IMX6QDL_CLK_MMDC_CH0_AXI]);
 		imx_clk_set_parent(clk[IMX6QDL_CLK_IPU2_SEL], clk[IMX6QDL_CLK_MMDC_CH0_AXI]);
 	}
 
